@@ -6,10 +6,22 @@ This is purely for testing, no practical use!
 Now updated for M4 firmware v1.0.9b7 with HOST net API.
 
 tcp.s       - tcp client z80 code for maxam.
+
+
 tcpc.bin    - binary of client, run"tcpc"
+
+
 tcpserv.s   - tcp server z80 code for maxam.
+
+
 tcpserv.bin - binary for server, run"tcpserv"
+
+
 main.c, makefile - tcp echo server for windows/linux  (remove wsock32 in makefile for linux build)
+
+
 tcpserv.exe - windows build for tcp echo server.
+
+
 
 -Duke
