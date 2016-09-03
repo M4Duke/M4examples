@@ -1,5 +1,5 @@
 
-			; TCP Echo client example for M4 Board
+			; TCP Echo Server example for M4 Board
 			; Requires firmware v1.0.9b7 upwards
 			; Duke 2016
 			
@@ -7,59 +7,94 @@
 			nolist
 DATAPORT		equ &FE00
 ACKPORT		equ &FC00			
+
+C_NETSTAT		equ &4323
+C_TIME		equ &4324
+C_VERSION		equ &4326
 C_NETSOCKET	equ &4331
 C_NETCONNECT	equ &4332
 C_NETCLOSE	equ &4333
 C_NETSEND		equ &4334
 C_NETRECV		equ &4335
 C_NETHOSTIP	equ &4336
-			
-start:		ld	a,2			
-			call	&bc0e		; set mode 2
-get_server_ip:	ld	hl,msgserverip
-			call	disptextz
-			ld	hl,buf
-			call	get_textinput
-			
-			cp	&FC			; ESC?
-			ret	z
-			xor	a
-			cp	c
-			jr	z, get_server_ip
-		
-			; convert ascii IP to binary, no checking for non decimal chars format must be x.x.x.x
-			
-			ld	hl,buf	
-			call	ascii2dec
-			ld	(ip_addr+3),a
-			call	ascii2dec
-			ld	(ip_addr+2),a
-			call	ascii2dec
-			ld	(ip_addr+1),a
-			call	ascii2dec
-			ld	(ip_addr),a
-			
+C_NETRSSI		equ &4337
+C_NETBIND		equ &4338
+C_NETLISTEN	equ &4339
+C_NETACCEPT	equ &433A
+
+start:		
 
 			push	iy
 			push	ix
-
 			ld	a,(m4_rom_num)
 			cp	&FF
 			call	z,find_m4_rom	; find rom (only first run)
 							; should add version check too and make sure its v1.0.9
 			cp	&FF
-			call	nz,tcpclient
+			call	nz,tcpserver
 			
 			pop	ix
 			pop	iy
 			ret
 	
-tcpclient:	ld	hl,&FF02	; get response buffer address
+tcpserver:	ld	a,2			
+			call	&bc0e		; set mode 2
+
+			ld	hl,&FF02	; get response buffer address
 			ld	e,(hl)
 			inc	hl
 			ld	d,(hl)
 			push	de
 			pop	iy
+			ld	hl,msgserver
+			call	disptextz
+		
+			; get connection status 
+			
+			ld	hl,cmdnetstat
+			call	sendcmd
+			push	iy
+			pop	hl
+			inc	hl
+			inc	hl
+			inc	hl
+			call	disptextz
+			
+			; get rssi strength
+				
+			ld	hl,cmdrssi
+			call	sendcmd
+			ld	hl,msgsignal
+			call	disptextz
+			ld	a,(iy+3)
+			call	disp_hex
+			
+			; get time
+			
+			ld	hl,msgtime
+			call	disptextz
+			
+			ld	hl,cmdtime
+			call	sendcmd
+			push	iy
+			pop	hl
+			inc	hl
+			inc	hl
+			inc	hl
+			call	disptextz
+			
+			; display version
+			
+			ld	hl,cmdver
+			call	sendcmd
+			push	iy
+			pop	hl
+			inc	hl
+			inc	hl
+			inc	hl
+			call	disptextz
+			
+			call	crlf
 			
 			; get a socket
 			
@@ -71,11 +106,13 @@ tcpclient:	ld	hl,&FF02	; get response buffer address
 			
 			; store socket in predefined packets
 			
-			ld	(csocket),a
-			ld	(clsocket),a
-			ld	(rsocket),a
-			ld	(sendsock),a
-			
+			ld	(lsocket),a	; listen socket
+			ld	(bsocket),a	; bind socket
+			ld	(asocket),a	; accept socket
+			ld	(rsocket),a	; receive socket
+			ld	(sendsock),a	; send socket
+			ld	(sendsock2),a	; send socket (welcome)
+			ld	(clsocket),a	; close socket
 			
 			; multiply by 16 and add to socket status buffer
 			
@@ -94,52 +131,74 @@ tcpclient:	ld	hl,&FF02	; get response buffer address
 			push	hl
 			pop	ix		; ix ptr to current socket status
 			
-			; connect to server
+			; bind to IP addr and port
 			
-			ld	hl,cmdconnect
+			ld	hl,cmdbind	; fill in ip addr & port if predef not fitting.
 			call	sendcmd
 			ld	a,(iy+3)
-			cp	255
-			jp	z,exit_close
-wait_connect:
-			ld	a,(ix)			; get socket status  (0 ==IDLE (OK), 1 == connect in progress, 2 == send in progress)
-			cp	1				; connect in progress?
-			jr	z,wait_connect
 			cp	0
-			jr	z,connect_ok
-			call	disp_error	
-			jp	exit_close
-connect_ok:	ld	hl,msgconnect
-			call	disptextz
-
-mainloop:		ld	hl,sendtext
-			call	get_textinput			
-			cp	&FC			; ESC?
-			jp	z, exit_close	
-			xor	a
-			cp	c
-			jr	z, mainloop	; nothing in buffer!
-			ld	(sendsize),bc
-			call	crlf
-wait_send:	ld	a,(ix)
-			cp	2			; send in progress?
-			jr	z,wait_send	; Could do other stuff here!
-			cp	0
-			call	nz,disp_error	
+			jp	nz, exit_close_error
 			
-			ld	hl,5
-			add	hl,bc
-			ex	de,hl
-			ld	hl,cmdsend
-			ld	(hl),e
+			ld	hl,cmdlisten	; tell it to listen to above port and ip addr
 			call	sendcmd
-
-						
-			; reset size
-			ld	hl,0
-			ld	(sendsize),hl
-
-wait_recv:			
+			ld	a,(iy+3)
+			cp	0
+			jp	nz, exit_close_error
+		
+			ld	hl,cmdaccept	; accept incoming connection..
+			call	sendcmd
+			ld	a,(iy+3)
+			cp	0
+			jp	nz, exit_close_error
+			
+			ld	hl,msgwait
+			call	disptextz
+			
+			; wait for someone to connect!
+wait_client:	call	&bb09
+			jr	nc, notvalid
+			cp	&fc				; ESC pressed?
+			jp	z,exit_close	
+notvalid:
+			ld	a,(ix)			; get socket status  (0 ==IDLE (OK), 1 == connect in progress, 2 == send in progress, 3 = remote closed conn, 4 == wait incoming)
+			cp	4				; incoming connection in progress?
+			jr	z,wait_client
+			cp	0
+			jp	nz, exit_close_error
+			
+			ld	hl,msgconnected
+			call	disptextz
+			
+			; send welcome greeting to client
+			
+			;ld	hl,cmdwelcome
+			;call	sendcmd
+			
+			; display ip number
+			
+			ld	l,(ix+7)
+			call	dispdec
+			ld	a,&2e
+			call	&bb5a
+			ld	l,(ix+6)
+			call	dispdec
+			ld	a,&2e
+			call	&bb5a
+			ld	l,(ix+5)
+			call	dispdec
+			ld	a,&2e
+			call	&bb5a
+			ld	l,(ix+4)
+			call	dispdec
+			
+			call	crlf
+			
+			; look for incoming data and display it
+wait_recv:	call	&bb09
+			jr	nc, notvalid1
+			cp	&fc				; ESC pressed?
+			jr	z,exit_close	
+notvalid1:
 			ld	bc,255	
 			call	recv
 			cp	&FF
@@ -152,21 +211,49 @@ wait_recv:
 			cp	b
 			jr	z,wait_recv	; keep looping, want a reply. Could do other stuff here!
 got_msg:	
-					
+			
 			; disp received msg
 			ld	a,&3E
 			call	&bb5a
+			
 			push	iy
 			pop	hl
-		
+			
 			ld	de,&6
 			add	hl,de		; received text pointer
+			
+			; echo it back
+			
+			push	hl
+			push	bc
+			ld	de,sendtext
+			ld	a,c
+			ld	bc,250	; max size, prevent overflow because I am too lazy to re-write the sendcmd...
+			ldir
+			
+			ld	hl,sendsize
+			ld	(hl),a
+			inc	hl
+			ld	(hl),0
+			ld	hl,cmdsend
+			add	5			; add header size
+			ld	(hl),a
+			
+			call	sendcmd
+			pop	bc
+			pop	hl
+			
+			; display it
+			
 			call	disptext
 			call	crlf
-			jp	mainloop
 			
+			
+			
+			jp	wait_recv
 
-
+exit_close_error:
+			call	disp_error	
 exit_close:
 			ld	hl,cmdclose
 			call	sendcmd			
@@ -322,7 +409,7 @@ disp_error:
 			ld	bc,9
 			call	disptext
 			pop	bc
-			ld	a,b
+disp_hex:		ld	a,b
 			srl	a
 			srl	a
 			srl	a
@@ -344,135 +431,66 @@ disp_error:
 			ld	a,13
 			call	&bb5a
 			ret
-			
-			;
-			; Get input text line.
-			;
-			; in
-			; hl = dest buf
-			; return
-			; bc = out size
-get_textinput:		
-			ld	bc,0
-			call	&bb81	
-inputloop:
-re:			call	&bd19
-			call	&bb09
-			jr	nc,re
 
-			cp	&7F
-			jr	nz, not_delkey
-			ld	a,c
-			cp	0
-			jr	z, inputloop
-			push	hl
-			push	bc
-			call	&bb78
-			dec	h
-			push	hl
-			call	&bb75
-			ld	a,32
-			call	&bb5a
-			pop	hl
-			call	&bb75
-			pop	bc
-			pop	hl
-			dec	hl
-			dec	bc
-			jr	inputloop
-not_delkey:	
-			cp	13
-			jr	z, enterkey
-			cp	&FC
-			ret	z
-			cp	32
-			jr	c, inputloop
-			cp	&7e
-			jr	nc, inputloop
-			ld	(hl),a
-			inc	hl
-			inc	bc
-			push	hl
-			push	bc
-			call	&bb5a
-			call	&bb78
-			push	hl
-			ld	a,32
-			call	&bb5a
-			pop	hl
-			call	&bb75
-			pop	bc
-			pop	hl
-			jp	inputloop
-enterkey:		ld	(hl),0
-			ret
+			; l = 8 bit number
+dispdec:		ld	h,0
+			ld	bc,-100
+			call	Num1
+			ld	c,-10
+			call	Num1
+			ld	c,b
+
+Num1:		ld	a,'0'-1
+Num2:		inc	a
+			add	hl,bc
+			jr	c,Num2
+			sbc	hl,bc
+			jp	&bb5a
+
 crlf:		ld	a,10
 			call	&bb5a
 			ld	a,13
 			jp	&bb5a
-
-ascii2dec:	ld	d,0
-loop2e:		ld	a,(hl)
-			cp	0
-			jr	z,found2e
-			cp	&2e
-			jr	z,found2e
-			; convert to decimal
-			cp	&41	; a ?
-			jr	nc,less_than_a
-			sub	&30	; - '0'
-			jr	next_dec
-less_than_a:	sub	&37	; - ('A'-10)
-next_dec:		ld	(hl),a
-			inc	hl
-			inc	d
-			dec	bc
-			xor	a
-			cp	c
-			ret	z
-			jr	loop2e
-found2e:
-			push	hl
-			call	dec2bin
-			pop	hl
-			inc	hl
-			ret
-dec2bin:		dec	hl
-			ld	a,(hl)
-			dec	hl
-			dec	d
-			ret	z
-			ld	b,(hl)
-			inc	b
-			dec	b
-			jr	z,skipmul10
-mul10:		add	10
-			djnz	mul10
-skipmul10:	dec	d
-			ret	z
-			dec	hl
-			ld	b,(hl)
-			inc	b
-			dec	b
-			ret	z
-mul100:		add	100
-			djnz	mul100
-			ret
 			
+msgserver:	db	"********** TCP SERVER **********",10,13,0
+msgsignal:	db	"Signal: &",0
+msgtime:		db	"Time: ",0
+msgwait:		db	10,13,"TCP server, waiting for client to connect...",10,13,0			
+msgconnected:	db	10,13,"Client connected! IP addr: ",0
 msgconnclosed:	db	10,13,"Remote closed connection....",10,13,0
 msgsenderror:	db	10,13,"ERROR: ",0
-msgconnect:	db	10,13,"Connected!",10,13,"Type text to server",10,13,0
-msgserverip:	db	10,13,"Input TCP server IP:",10,13,0
-
+cmdwelcome:	db	29
+			dw	C_NETSEND
+sendsock2:	db	0
+			dw	24			
+			db	10,13,"Welcome to M4 NET !",10,13,0
+cmdnetstat:	db	2
+			dw	C_NETSTAT
+cmdrssi:		db	2
+			dw	C_NETRSSI
+cmdtime:		db	2
+			dw	C_TIME
+cmdver:		db	2
+			dw	C_VERSION
 cmdsocket:	db	5
 			dw	C_NETSOCKET
-			db	&0,&0,&6		; domain, type, protocol (TCP/ip)
+			db	&0,&0,&6		; domain(not used), type(not used), protocol (TCP/IP)
 
-cmdconnect:	db	9	
-			dw	C_NETCONNECT
-csocket:		db	&0
-ip_addr:		db	0,0,0,0		; ip addr
-			dw	&1234		; port
+cmdbind:		db	9
+			dw	C_NETBIND
+bsocket:		db	&0
+bipaddr:		db	0,0,0,0		; IP 0.0.0.0 == IP_ADDR_ANY
+bport:		dw	&1234		; port number
+
+cmdlisten:	db	3
+			dw	C_NETLISTEN
+lsocket:		db	0
+
+cmdaccept:	db	3
+			dw	C_NETACCEPT
+asocket:		db	0
+
+
 cmdsend:		db	0			; we can ignore this byte (part of early design)	
 			dw	C_NETSEND
 sendsock:		db	0
