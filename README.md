@@ -1,4 +1,6 @@
 TCP Echo server for PC & CPC and Client for CPC for testing M4 board
+====================================================================
+
 
 Run tcpserv.exe on your PC and run tcpc.bin on your CPC.
 
@@ -22,14 +24,18 @@ tcpserv.s   - tcp server z80 code for maxam.
 
 tcpserv.bin - binary for server, run"tcpserv"
 
-
-lookup.s    - Example use of dns lookup.
-
-
 main.c, makefile - tcp echo server for windows/linux  (remove wsock32 in makefile for linux build)
 
 
 tcpserv.exe - windows build for tcp echo server.
+
+
+Other examples
+==============
+
+lookup.s    - Example use of dns lookup.
+
+httpget.s   - Raw http get example, using netapi. Will download and display m4info.txt
 
 
 
