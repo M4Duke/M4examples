@@ -37,6 +37,6 @@ lookup.s    - Example use of dns lookup.
 
 httpget.s   - Raw http get example, using netapi. Will download and display m4info.txt
 
-
+sd_readsector.s - Reads a sector from the SD card and displays its contents
 
 -Duke
