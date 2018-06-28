@@ -39,4 +39,6 @@ httpget.s   - Raw http get example, using netapi. Will download and display m4in
 
 sd_readsector.s - Reads a sector from the SD card and displays its contents
 
+romup.s     - Example to use direct fat file i/o and upload new rom to M4 "romboard"
+
 -Duke
