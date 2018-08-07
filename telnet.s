@@ -1,5 +1,5 @@
 
-			; Telnet client example for M4 Board
+			; Telnet client v1.0.1 beta example for M4 Board
 			; Written by Duke 2018
 			; Requires firmware v1.1.0 upwards
 			; Assembles with RASM (www.roudoudou.com/rasm)
@@ -27,6 +27,8 @@ C_NETHOSTIP		equ 0x4336
 km_read_char	equ	0xBB09
 km_wait_key		equ	0xBB18
 txt_output		equ 0xBB5A
+txt_set_column	equ 0xBB6F
+txt_set_row		equ 0xBB72
 txt_set_cursor	equ	0xBB75
 txt_get_cursor	equ	0xBB78
 txt_cur_on		equ	0xBB81
@@ -351,6 +353,21 @@ mainloop:	ld		bc,1
 			jr		nc,mainloop
 			cp		0xFC			; ESC?
 			jp		z, exit_close	
+			cp		0x9				; TAB?
+			jr		nz, no_pause
+wait_no_tab:
+			call	km_read_char
+			cp		0x9
+			jr		z, wait_no_tab
+			
+pause_loop:			
+			call	km_read_char
+			cp		0xFC			; ESC?
+			jp		z, exit_close	
+			cp		0x9				; TAB again to leave
+			jr		nz, pause_loop
+			jr		mainloop
+no_pause:
 			
 			ld		hl,sendtext
 			ld		(hl),a
@@ -420,8 +437,8 @@ check_negotiate:
 			cp		0xFD	; DO
 			jr		nz, will_not
 			ld		a,(iy+7)
-			cp		CMD_WINDOW_SIZE			; CMD_WINDOW_SIZE ?
-			jr		nz, will_not	;	not_window_size
+			cp		CMD_WINDOW_SIZE	
+			jr		nz, will_not
 			; negotiate window size
 			ld		a,8
 			ld		(cmdsend),a
@@ -434,7 +451,7 @@ check_negotiate:
 			inc		hl
 			ld		(hl),0xFB		; WILL
 			inc		hl
-			ld		(hl),CMD_WINDOW_SIZE		; CMD_WINDOW_SIZE
+			ld		(hl),CMD_WINDOW_SIZE
 			
 			ld		hl, cmdsend
 			call	sendcmd
@@ -452,7 +469,7 @@ check_negotiate:
 			inc		hl
 			ld		(hl),0xFA		; SB sub negotiation
 			inc		hl
-			ld		(hl),CMD_WINDOW_SIZE		;CMD_WINDOW_SIZE
+			ld		(hl),CMD_WINDOW_SIZE
 			inc		hl
 			ld		(hl),0
 			inc		hl
@@ -521,9 +538,9 @@ recv_noblock:
 			
 			call 	recv
 			cp		0xFF
-			jr		z, exit_close	
+			jp		z, exit_close	
 			cp		3
-			jr		z, exit_close
+			jp		z, exit_close
 			xor		a
 			cp		c
 			jr		nz, got_msg2
@@ -545,19 +562,149 @@ got_msg2:
 			jr		nz,not_tel_cmd
 			call	negotiate
 			
-			jr		recvdone
+			jp		recvdone
 			
 not_tel_cmd:
 			ld		b,a
-			cp		0x1B		; escape code esc sequence?
+			cp		0x1B		; escape code sequence?
 			jr		nz, notescapeCode
 			ld		(isEscapeCode),a
-			jr		recvdone
+			xor		a
+			ld		(EscapeCount),a
+			jp		recvdone
 notescapeCode:
 			ld		a,(isEscapeCode)
 			cp		0
-			jr		z,not_in_passmode
-			ld		a,b
+			jp		z, not_in_escmode
+			ld		hl, EscapeBuf
+			ld		a, (EscapeCount)
+			inc		a
+			ld		e,a
+			ld		d,0
+			add		hl,de
+			ld		(EscapeCount),a
+			cp		1
+			jp		z, skip_check_esc_code	; we only want 0x1B,'[' ... for now
+			ld		a,(hl)
+			
+			cp		'A'					; cursor up
+			jr		nz,	not_A
+			ld		b,11				; VT
+			ld		a, (EscapeCount)
+			cp		2
+			jp		z,do_control_code
+			call	escape_val
+			ld		b,a
+			call	txt_get_cursor		; H = col, L = line
+			ld		a,l
+			sub		b					; new line (should do <0 etc checks, gah)
+			call	txt_set_row
+			jp		isok2
+not_A:
+			cp		'B'					; cursor down
+			jr		nz,	not_B:
+			ld		a, (EscapeCount)
+			ld		b,10				; LF
+			cp		2
+			jp		z,do_control_code
+			call	escape_val
+			ld		b,a
+			call	txt_get_cursor		; H = col, L = line
+			ld		a,l
+			add		b					; new line 
+			call	txt_set_row
+			jp		isok2
+			jp		do_control_code
+not_B:
+			cp		'C'					; cursor forward
+			jr		nz,	not_C
+			ld		a, (EscapeCount)
+			ld		b,9					; TAB
+			cp		2
+			jp		z,do_control_code
+			call	escape_val
+			ld		b,a
+			call	txt_get_cursor		; H = col, L = line
+			ld		a,h
+			add		b					; new column, should check
+			call	txt_set_column
+			jp		isok2
+not_C:			
+			cp		'D'					; cursor backwards
+			jr		nz,	not_D
+			ld		a, (EscapeCount)
+			ld		b,8					; BS
+			cp		2
+			jp		z,do_control_code
+			call	escape_val
+			ld		b,a
+			call	txt_get_cursor		; H = col, L = line
+			ld		a,h
+			sub		b					; new column, should check
+			call	txt_set_column
+			jp		isok2
+not_D:		cp		'E'				; cursor next line
+			jr		nz, not_E
+			ld		a, (EscapeCount)
+			call		escape_val
+			ld		b,1
+			cp		0
+			jr		z, default_1line
+			ld		b,a
+default_1line:			
+			call	txt_get_cursor		; H = col, L = line
+			add		l
+			ld		l,a
+			ld		h,0
+			call	txt_set_cursor
+			jp		isok2
+not_E:		cp		'F'
+			jr		nz, not_F
+			call	escape_val
+			ld		b,1
+			cp		0
+			jr		z, default_1line2
+			ld		b,a
+default_1line2:			
+			call	txt_get_cursor		; H = col, L = line
+			ld		a,l
+			sub		b
+			ld		l,a					
+			ld		h,0
+			call	txt_set_cursor
+			jp		isok2
+not_F:		cp		'G'
+			jr		nz, not_G
+			call	escape_val
+			ld		b,1
+			cp		0
+			jr		z, default_1col
+			ld		b,a
+default_1col:			
+			call	txt_get_cursor		; H = col, L = line
+			ld		a,h
+			sub		b
+			ld		h,a					
+			call	txt_set_cursor
+			jp		isok2
+not_G:
+			cp		's'
+			jr		nz, not_s
+			call	txt_get_cursor
+			ld		(curPos),hl
+			jp		isok2
+not_s:
+			cp		'u'
+			jr		nz, not_u
+			ld		hl,(curPos)
+			call	txt_set_cursor
+			jp		isok2
+not_u:			
+		
+skip_check_esc_code:	
+			
+			; filter out unsused sequences
+			
 			; upper case
 			cp		0x41
 			jr		c, recvdone			; less than
@@ -573,7 +720,11 @@ isok2:
 			xor		a
 			ld		(isEscapeCode),a
 			jr		recvdone
-not_in_passmode:
+do_control_code:
+			xor		a
+			ld		(isEscapeCode),a
+
+not_in_escmode:
 			ld		a,b
 			call	txt_output
 recvdone:	
@@ -923,6 +1074,7 @@ crlf:		ld		a,10
 			ld		a,13
 			jp		txt_output
 
+			
 			; HL = point to IP addr
 			
 disp_ip:	ld		bc,3
@@ -1116,7 +1268,53 @@ nomul16:
 			dec	a
 			jp	nz,mul16Loop
 			ret
-			
+escape_val:	cp		2
+			jr		nz, has_value
+			xor		a
+			ret
+has_value:	ld		d,0
+			sub		2
+			ld		e,a
+dec_loop2:
+			ld		a,(hl)
+			cp		0x41	; a ?
+			jr		nc,less_than_a2
+			sub		0x30	; - '0'
+			jr		next_dec2
+less_than_a2:	
+			sub		0x37	; - ('A'-10)
+next_dec2:	inc	hl
+			cp	0
+			jr	nz, do_mul
+			dec	e
+			jr	nz, dec_loop2
+			ld	a,d
+			ret
+do_mul:		ld	b,a
+			ld	a,e
+			cp	3
+			jr	nz, not_3digits
+			xor	a
+a_mul100:		add	100
+			djnz	a_mul100
+			ld	d,a
+			dec	e
+			jr	nz, dec_loop2
+			ret
+not_3digits:		cp	2
+			jr	nz, not_2digits
+			xor	a
+a_mul10:		add	10
+			djnz	a_mul10
+			add	d			
+			ld	d,a
+			dec	e
+			jr	nz, dec_loop2
+			ret
+			ld	a,d
+not_2digits:	ld	a,b
+			add	d
+			ret			
 			
 disp_port:
 			ld		bc,-10000
@@ -1181,7 +1379,7 @@ msgconnecting:	db	10,13, "Connecting to IP ",0
 msgport:		db  " port ",0
 msgresolve:		db	10,13, "Resolving: ",0
 msgfail:		db 	", failed!", 10, 13, 0
-msgtitle:		db	"CPC telnet client v1.0.0 beta / Duke 2018",0
+msgtitle:		db	"CPC telnet client v1.0.1 beta / Duke 2018",0
 msgtitle2:		db  "=========================================",0
 msguserabort:	db	10,13,"User aborted (ESC)", 10, 13,0
 cmdsocket:		db	5
@@ -1215,5 +1413,8 @@ rsize:			dw	2048		; size
 			
 m4_rom_name:	db "M4 BOAR",0xC4		; D | 0x80
 m4_rom_num:	db	0xFF
+curPos:			dw	0
 isEscapeCode:	db	0
+EscapeCount:	db	0
+EscapeBuf:		ds	255
 buf:			ds	255	
