@@ -42,6 +42,7 @@ sd_readsector.s - Reads a sector from the SD card and displays its contents
 romup.s     - Example to use direct fat file i/o and upload new rom to M4 "romboard"
 
 telnet.s    - Super simple telnet client example, only does a few basics, needs more work.
+
 telnet.bin  - Binary version, download to cpc and run"telnet
 
 -Duke
