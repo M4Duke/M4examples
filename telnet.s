@@ -420,7 +420,7 @@ check_negotiate:
 			cp		0xFD	; DO
 			jr		nz, will_not
 			ld		a,(iy+7)
-			cp		0x31			; CMD_WINDOW_SIZE ?
+			cp		CMD_WINDOW_SIZE			; CMD_WINDOW_SIZE ?
 			jr		nz, will_not	;	not_window_size
 			; negotiate window size
 			ld		a,8
@@ -434,7 +434,7 @@ check_negotiate:
 			inc		hl
 			ld		(hl),0xFB		; WILL
 			inc		hl
-			ld		(hl),0x31		; CMD_WINDOW_SIZE
+			ld		(hl),CMD_WINDOW_SIZE		; CMD_WINDOW_SIZE
 			
 			ld		hl, cmdsend
 			call	sendcmd
@@ -452,7 +452,7 @@ check_negotiate:
 			inc		hl
 			ld		(hl),0xFA		; SB sub negotiation
 			inc		hl
-			ld		(hl),0x31		;CMD_WINDOW_SIZE
+			ld		(hl),CMD_WINDOW_SIZE		;CMD_WINDOW_SIZE
 			inc		hl
 			ld		(hl),0
 			inc		hl
@@ -645,7 +645,7 @@ recv_ok:
 			;
 				
 find_m4_rom:
-			ld		iy,m4_rom_numame	; rom identification line
+			ld		iy,m4_rom_name	; rom identification line
 			ld		d,127		; start looking for from (counting downwards)
 			
 romloop:	push	de
@@ -1213,7 +1213,7 @@ cmdrecv:		db	5
 rsocket:		db	0x0			; socket
 rsize:			dw	2048		; size
 			
-m4_rom_numame:	db "M4 BOAR",0xC4		; D | 0x80
+m4_rom_name:	db "M4 BOAR",0xC4		; D | 0x80
 m4_rom_num:	db	0xFF
 isEscapeCode:	db	0
 buf:			ds	255	
