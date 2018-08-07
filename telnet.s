@@ -71,7 +71,7 @@ start:		ld		a,2
 			call	disptextz
 			call	crlf
 			
-			; find rom M4 rom nber
+			; find rom M4 rom number
 			
 			ld		a,(m4_rom_num)
 			cp		0xFF
@@ -117,7 +117,7 @@ cmpgte2:	bit		7,d
 cmpgte3:	ld		hl,msgok	
 			call	disptextz
 
-			; ask for server / ip (mainloop)
+			; ask for server / ip
 loop_ip:
 			ld		hl,msgserverip
 			call	disptextz
@@ -247,7 +247,7 @@ convert_ip:
 			ld		(ip_addr),a
 			dec		hl
 check_port:	ld		a,(hl)
-			cp		0x3A		; any ':' for port nber ?
+			cp		0x3A		; any ':' for port number ?
 			jr		nz, no_port
 			
 			push	hl
@@ -675,9 +675,9 @@ match_char:
 			and		0x80
 			jr		z,cmp_loop
 			
-			; rom found, store the rom nber
+			; rom found, store the rom number
 			
-			pop		de			;  rom nber
+			pop		de			;  rom number
 			ld 		a,d
 			ld		(m4_rom_num),a
 			ret
