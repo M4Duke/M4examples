@@ -44,5 +44,6 @@ romup.s     - Example to use direct fat file i/o and upload new rom to M4 "rombo
 telnet.s    - Super simple telnet client example, only does a few basics, needs more work.
 
 telnet.bin  - Binary version, download to cpc and run"telnet
+m4reconf.s - Re-programs M4 flash with contents of romslots.bin&romconfig.bin, ie. use other peoples romsetup
 
 -Duke
