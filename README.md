@@ -49,4 +49,8 @@ m4reconf.s - Re-programs M4 flash with contents of romslots.bin&romconfig.bin, i
 
 m4reconf.bin - Binary version, run from /M4 directory
 
+savelow.s  - Simply program demonstrating the new feature of FW2.0.7 to change between lowerroms.
+
+savelow.s  - Binary version. Will dump all 3 lowerroms of M4 board to microSD.
+
 -Duke
