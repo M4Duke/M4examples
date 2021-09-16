@@ -53,4 +53,8 @@ savelow.s  - Simply program demonstrating the new feature of FW2.0.7 to change b
 
 savelow.bin  - Binary version. Will dump all 3 lowerroms of M4 board to microSD.
 
+getdir.s      - Example to use native M4 board commands to retrive a directory.
+
+fastcopy.s    - Example to copy files via amsdos cas_in/cas_out but using its buffer & ptrs for fast(er) speed.
+
 -Duke
