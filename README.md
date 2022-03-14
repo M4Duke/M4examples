@@ -57,4 +57,6 @@ getdir.s      - Example to use native M4 board commands to retrive a directory.
 
 fastcopy.s    - Example to copy files via amsdos cas_in/cas_out but using its buffer & ptrs for fast(er) speed.
 
+wr-rd.s       - Clean & Simple example of writing and reading a file using M4 commands.
+
 -Duke
