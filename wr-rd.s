@@ -246,7 +246,7 @@ wr_loop:
 			
 			ld		bc,ACKPORT						; kick the command
 			out 	(c),c
-
+			ret
 
 			; ------------------------- fclose
 			; -- parameters:
